@@ -35,6 +35,7 @@ const TEMPLATE = [
   ['Correias de acessórios', 'Motor', 40000, 36], ['Correia dentada e tensor', 'Motor', 60000, 48],
   ['Amortecedores e kits', 'Suspensão', 60000, 60], ['Bateria', 'Elétrica', null, 36], ['Palhetas do limpador', 'Conforto', null, 12]
 ];
+const FORMAS = ['Dinheiro', 'Pix', 'Cartão de crédito', 'Cartão de débito', 'Boleto', 'Transferência', 'Outro'];
 const tplPlan = () => TEMPLATE.map(([item, cat, intKm, intMeses]) => ({ id: uid(), item, cat, ultima: null, kmTroca: null, intKm, intMeses, obs: '' }));
 
 // ================= criptografia =================
@@ -55,6 +56,7 @@ function fixV(v) {
   v.id ||= uid(); v.km = Number(v.km) || 0;
   ['plano', 'hist', 'visitas'].forEach(k => { if (!Array.isArray(v[k])) v[k] = []; });
   v.plano.forEach(p => p.id ||= uid());
+  v.visitas.forEach(x => { if (!Array.isArray(x.pagamentos)) x.pagamentos = []; if (x.garantia == null) x.garantia = 90; x.obs ||= ''; x.feito ||= ''; });
   return v;
 }
 function migrate(d) {
@@ -105,6 +107,8 @@ const sico = s => s === 'EM DIA' ? 'check' : s === 'EM BREVE' ? 'clock' : s === 
 const tag = (s, label) => `<span class="tag ${cls(s)}">${ic(sico(s))}${label || s}</span>`;
 const lineTotal = h => (h.qtd || 0) * (h.unit || 0) - (h.desconto || 0);
 const visitTotal = (v, x) => v.hist.filter(h => h.os === x.os && h.data === x.data).reduce((a, h) => a + lineTotal(h), 0);
+const payTotal = x => (x.pagamentos || []).reduce((a, p) => a + (Number(p.valor) || 0), 0);
+const payText = p => p.parcelas > 1 ? `${esc(p.forma)} · ${p.parcelas}× de ${brl(p.valor / p.parcelas)} (${brl(p.valor)})` : `${esc(p.forma)} · ${brl(p.valor)}`;
 const plate = p => p ? `<span class="plate"><i>BRASIL</i><b>${esc(String(p).toUpperCase())}</b></span>` : '';
 const vDesc = v => [v.marca, v.modelo, v.ano].filter(Boolean).join(' · ');
 
@@ -124,7 +128,7 @@ function showLogin(msg = '') {
   $('#loginBtn').textContent = create ? 'Criar minha conta' : 'Entrar';
   $('#loginMsg').innerHTML = create ? 'Crie seu usuário e senha. Seus veículos ficam criptografados neste aparelho e só você vê.' : 'Entre com seu usuário e senha.';
   $('#pass').autocomplete = create ? 'new-password' : 'current-password';
-  $('#pass').value = $('#pass2').value = ''; $('#seed').value = ''; $('#loginErr').textContent = msg;
+  $('#pass').value = $('#pass2').value = ''; $('#loginErr').textContent = msg;
   $('#switchMode').textContent = create ? 'Já tenho conta' : 'Primeiro acesso? Criar conta';
 }
 async function afterAuth() {
@@ -233,18 +237,25 @@ function viewHist(v) {
   <div class="toolbar"><div class="search">${ic('search')}<input id="hq" placeholder="Buscar peça, serviço, oficina…" value="${esc(UI.hq)}"></div></div>
   <div class="chips"><button class="chip ${!UI.hc ? 'on' : ''}" data-hc="">Todas</button>${used.map(c => `<button class="chip ${UI.hc === c ? 'on' : ''}" data-hc="${esc(c)}">${catIc(c)}${esc(c)}</button>`).join('')}</div>
   <div class="lab">${list.length} itens · ${brl(shown)}</div>
-  <div class="rows">${list.map(({ h, i }) => `<div class="row2"><div class="ico">${catIc(h.cat)}</div><div class="grow"><b>${esc(h.desc)}</b><span>${fd(h.data)} · ${esc(h.cat)} · OS ${esc(h.os)}${h.qtd > 1 ? ' · ' + h.qtd + '×' : ''}</span></div><div class="val">${brl(lineTotal(h))}</div><button class="icon-btn" style="width:32px;height:32px;border:0;color:var(--mut)" data-del="${i}" aria-label="Apagar">${ic('trash-2')}</button></div>`).join('') || '<div class="empty">Nenhum lançamento.</div>'}</div>`;
+  <div class="rows">${list.map(({ h, i }) => `<div class="row2 link" data-act="edit-hist" data-i="${i}"><div class="ico">${catIc(h.cat)}</div><div class="grow"><b>${esc(h.desc)}</b><span>${fd(h.data)} · ${esc(h.cat)} · OS ${esc(h.os)}${h.qtd > 1 ? ' · ' + h.qtd + '×' : ''}</span></div><div class="val">${brl(lineTotal(h))}</div><button class="icon-btn" style="width:32px;height:32px;border:0;color:var(--mut)" data-del="${i}" aria-label="Apagar">${ic('trash-2')}</button></div>`).join('') || '<div class="empty">Nenhum lançamento.</div>'}</div>`;
 }
 
 function viewVisitas(v) {
   const list = v.visitas.map((x, i) => ({ x, i })).sort((a, b) => b.x.data.localeCompare(a.x.data));
-  return `<div class="pageh"><h1>Visitas à oficina</h1></div>` + (list.map(({ x, i }) => {
-    const gar = addDays(pd(x.data), 90), vig = gar >= today();
-    return `<div class="panel" style="padding:14px;margin-bottom:12px"><div class="top" style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div class="lab" style="margin-bottom:4px">${ic('store')} ${fd(x.data)} · OS ${esc(x.os)}</div><b>${esc(x.oficina)}</b></div><div class="val" style="font-size:24px">${brl(visitTotal(v, x))}</div></div>
-    <p class="muted" style="font-size:13px;margin:6px 0 12px">${kmf(x.km)} km · ${tag(vig ? 'EM DIA' : 'SÓ SE FALHAR', vig ? 'Garantia até ' + fd(gar) : 'Garantia encerrada')}</p>
-    <label>O que foi feito<textarea rows="3" data-vs="${i}" data-f="feito">${esc(x.feito)}</textarea></label>
-    <label style="margin:0">Forma de pagamento<input data-vs="${i}" data-f="pagamento" value="${esc(x.pagamento)}"></label></div>`;
-  }).join('') || '<div class="panel empty">As visitas aparecem aqui conforme você faz lançamentos no Histórico.</div>');
+  return `<div class="pageh"><h1>Visitas à oficina</h1><button class="btn primary sm" data-act="add-visit">${ic('plus')} Visita</button></div>` + (list.map(({ x, i }) => {
+    const gar = x.garantia > 0 ? addDays(pd(x.data), x.garantia) : null, vig = gar && gar >= today();
+    const tot = visitTotal(v, x), pago = payTotal(x), itens = v.hist.filter(h => h.os === x.os && h.data === x.data);
+    const st = !x.pagamentos.length ? ['SEM REGISTRO', 'Pagamento não informado'] : Math.abs(pago - tot) < 0.01 ? ['EM DIA', 'Quitado'] : pago < tot ? ['EM BREVE', 'Falta ' + brl(tot - pago)] : ['EM BREVE', 'Pago a mais: ' + brl(pago - tot)];
+    return `<div class="panel" style="padding:14px;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><div class="lab" style="margin-bottom:4px">${ic('store')} ${fd(x.data)} · OS ${esc(x.os)}</div><b>${esc(x.oficina)}</b><div class="muted" style="font-size:13px">${kmf(x.km)} km</div></div><div class="val" style="font-size:26px">${brl(tot)}</div></div>
+    ${x.feito ? `<p style="margin:10px 0 0;font-size:14px">${esc(x.feito)}</p>` : ''}
+    ${itens.length ? `<p class="muted" style="font-size:12.5px;margin-top:6px">${itens.length} item(ns) lançado(s) no histórico</p>` : ''}
+    <div style="margin:12px 0 4px" class="lab">${ic('banknote')} Pagamento</div>
+    ${x.pagamentos.map(p => `<p style="font-size:14px;margin:2px 0">${payText(p)}</p>`).join('') || (x.pagamento && x.pagamento !== '—' ? `<p style="font-size:14px;margin:2px 0">${esc(x.pagamento)}</p>` : '')}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${tag(st[0], st[1])}${gar ? tag(vig ? 'EM DIA' : 'SÓ SE FALHAR', vig ? 'Garantia até ' + fd(gar) : 'Garantia encerrada') : ''}</div>
+    ${x.obs ? `<p class="muted" style="font-size:13px;margin-top:8px">${esc(x.obs)}</p>` : ''}
+    <div style="margin-top:12px"><button class="btn sm" data-act="edit-visit" data-i="${i}">${ic('pencil')} Editar visita e pagamento</button></div></div>`;
+  }).join('') || '<div class="panel empty">As visitas aparecem aqui conforme você faz lançamentos no Histórico, ou toque em “Visita” para criar uma.</div>');
 }
 
 function viewMais() {
@@ -288,14 +299,37 @@ function planForm(p) {
     <button class="btn primary wide">${ic('check')} Salvar</button>
     ${!n ? `<button type="button" class="btn danger wide" style="margin-top:8px" data-act="del-plan" data-id="${p.id}">${ic('trash-2')} Excluir item</button>` : ''}</form>`;
 }
-function histForm(v) {
-  return `<form data-form="hist-add">
-    <div class="row"><label>Data<input name="data" type="date" required value="${iso(today())}"></label><label>KM<input name="km" type="number" inputmode="numeric" required value="${v.km}"></label></div>
-    <div class="row"><label>Nº OS<input name="os" value="S/N"></label><label>Oficina<input name="oficina" placeholder="Nome da oficina"></label></div>
-    <div class="row"><label>Tipo<select name="tipo"><option>Peça</option><option selected>Serviço</option><option>Peça + serviço</option></select></label><label>Categoria<select name="cat">${catOpts('Revisão', v.hist.map(h => h.cat))}</select></label></div>
-    <label>Descrição<input name="desc" required></label>
-    <div class="row"><label>Qtd<input name="qtd" type="number" min="1" value="1" required></label><label>Valor unitário (R$)<input name="unit" type="number" step="0.01" inputmode="decimal" required></label><label>Desconto (R$)<input name="desconto" type="number" step="0.01" inputmode="decimal" value="0"></label></div>
-    <button class="btn primary wide">${ic('plus')} Adicionar</button></form>`;
+function histForm(v, h, i) {
+  const n = !h;
+  return `<form data-form="${n ? 'hist-add' : 'hist-edit'}" data-i="${i ?? ''}">
+    <div class="row"><label>Data<input name="data" type="date" required value="${h?.data || iso(today())}"></label><label>KM<input name="km" type="number" inputmode="numeric" required value="${h?.km ?? v.km}"></label></div>
+    <div class="row"><label>Nº OS<input name="os" value="${esc(h?.os || 'S/N')}"></label><label>Oficina<input name="oficina" placeholder="Nome da oficina" value="${esc(h?.oficina === 'Oficina não informada' ? '' : h?.oficina)}"></label></div>
+    <div class="row"><label>Tipo<select name="tipo">${['Peça', 'Serviço', 'Peça + serviço'].map(t => `<option ${t === (h?.tipo || 'Serviço') ? 'selected' : ''}>${t}</option>`).join('')}</select></label><label>Categoria<select name="cat">${catOpts(h?.cat || 'Revisão', v.hist.map(x => x.cat))}</select></label></div>
+    <label>Descrição<input name="desc" required value="${esc(h?.desc)}"></label>
+    <div class="row"><label>Qtd<input name="qtd" type="number" min="1" value="${h?.qtd ?? 1}" required></label><label>Valor unitário (R$)<input name="unit" type="number" step="0.01" inputmode="decimal" required value="${h?.unit ?? ''}"></label><label>Desconto (R$)<input name="desconto" type="number" step="0.01" inputmode="decimal" value="${h?.desconto ?? 0}"></label></div>
+    <label>Observação<input name="obs" value="${esc(h?.obs)}"></label>
+    <p class="muted" style="font-size:12.5px;margin:-4px 0 12px">A forma de pagamento é definida na visita (aba Visitas).</p>
+    <button class="btn primary wide">${ic('check')} ${n ? 'Adicionar' : 'Salvar'}</button>
+    ${!n ? `<button type="button" class="btn danger wide" style="margin-top:8px" data-del="${i}">${ic('trash-2')} Excluir lançamento</button>` : ''}</form>`;
+}
+const payRow = (p = { forma: 'Pix', valor: '', parcelas: 1 }) => `<div class="payrow row" style="grid-template-columns:1.3fr 1fr .6fr auto;align-items:end;margin-bottom:8px">
+  <label style="margin:0">Forma<select name="pf">${FORMAS.map(f => `<option ${f === p.forma ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
+  <label style="margin:0">Valor (R$)<input name="pv" type="number" step="0.01" inputmode="decimal" value="${p.valor ?? ''}"></label>
+  <label style="margin:0">Parc.<input name="pp" type="number" min="1" value="${p.parcelas || 1}"></label>
+  <button type="button" class="icon-btn" data-act="del-pay" aria-label="Remover pagamento">${ic('x')}</button></div>`;
+function visitForm(v, x, i) {
+  const n = !x, tot = x ? visitTotal(v, x) : 0;
+  return `<form data-form="${n ? 'visit-add' : 'visit-edit'}" data-i="${i ?? ''}">
+    <div class="row"><label>Data<input name="data" type="date" required value="${x?.data || iso(today())}"></label><label>KM<input name="km" type="number" inputmode="numeric" value="${x?.km ?? v.km}"></label></div>
+    <div class="row"><label>Nº OS<input name="os" value="${esc(x?.os || 'S/N')}"></label><label>Oficina<input name="oficina" value="${esc(x?.oficina === 'Oficina não informada' ? '' : x?.oficina)}"></label><label>Garantia (dias)<input name="garantia" type="number" min="0" value="${x?.garantia ?? 90}"></label></div>
+    <label>O que foi feito<textarea name="feito" rows="3">${esc(x?.feito)}</textarea></label>
+    <div class="lab" style="margin-top:4px">${ic('banknote')} Pagamento${tot ? ` · total ${brl(tot)}` : ''}</div>
+    <div id="pays">${(x?.pagamentos || []).map(payRow).join('')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button type="button" class="btn sm" data-act="add-pay">${ic('plus')} Forma de pagamento</button>${tot ? `<button type="button" class="btn sm" data-act="pay-total" data-total="${tot}">Pagar o total (${brl(tot)})</button>` : ''}</div>
+    ${x && !x.pagamentos.length && x.pagamento && x.pagamento !== '—' ? `<p class="muted" style="font-size:12.5px;margin:-6px 0 12px">Anotação antiga: ${esc(x.pagamento)}</p>` : ''}
+    <label>Observações<input name="obs" value="${esc(x?.obs)}"></label>
+    <button class="btn primary wide">${ic('check')} Salvar</button>
+    ${!n ? `<button type="button" class="btn danger wide" style="margin-top:8px" data-act="del-visit" data-i="${i}">${ic('trash-2')} Excluir visita e lançamentos</button>` : ''}</form>`;
 }
 function switcher() {
   sheet('Meus veículos', S.data.vehicles.map(x => `<button class="vrow ${x.id === S.data.cur ? 'on' : ''}" data-sw="${x.id}"><div class="grow"><b>${esc(x.nome)}</b><span>${esc(vDesc(x))} · ${kmf(x.km)} km</span></div>${plate(x.placa)}</button>`).join('') + `<button class="btn wide" style="margin-top:6px" data-act="add-vehicle">${ic('plus')} Adicionar veículo</button>`);
@@ -339,7 +373,7 @@ document.addEventListener('click', async e => {
   if (D.sw) { d.cur = D.sw; await save(); closeSheet(); render(); return toast('Veículo: ' + V().nome, 'car-front'); }
   if (D.km) { v.km = Math.max(0, v.km + Number(D.km)); await save(); return render(); }
   if (D.done) { const p = v.plano.find(x => x.id === D.done); p.ultima = iso(today()); p.kmTroca = v.km; await save(); render(); return toast(`${p.item}: feito hoje`); }
-  if (D.del != null) { if (confirm('Apagar este lançamento?')) { v.hist.splice(D.del, 1); await save(); render(); toast('Lançamento apagado', 'trash-2'); } return; }
+  if (D.del != null) { if (confirm('Apagar este lançamento?')) { v.hist.splice(D.del, 1); await save(); closeSheet(); render(); toast('Lançamento apagado', 'trash-2'); } return; }
   if (D.go) { if (D.pf != null) UI.pf = D.pf; else if (D.go === 'plano') UI.pf = 'todos'; if (D.hc != null) UI.hc = D.hc; else if (D.go === 'hist') UI.hc = ''; return go(D.go); }
   if (D.pf != null) { UI.pf = D.pf; return render(); }
   if (D.hc != null) { UI.hc = D.hc; return render(); }
@@ -351,6 +385,13 @@ document.addEventListener('click', async e => {
     case 'edit-plan': return sheet('Editar item', planForm(v.plano.find(x => x.id === D.id)));
     case 'del-plan': if (confirm('Excluir este item do plano?')) { v.plano = v.plano.filter(x => x.id !== D.id); await save(); closeSheet(); render(); toast('Item excluído', 'trash-2'); } return;
     case 'add-hist': return sheet('Novo lançamento', histForm(v));
+    case 'edit-hist': return sheet('Editar lançamento', histForm(v, v.hist[D.i], D.i));
+    case 'add-visit': return sheet('Nova visita', visitForm(v));
+    case 'edit-visit': return sheet('Editar visita', visitForm(v, v.visitas[D.i], D.i));
+    case 'add-pay': $('#pays').insertAdjacentHTML('beforeend', payRow()); return;
+    case 'pay-total': $('#pays').insertAdjacentHTML('beforeend', payRow({ forma: 'Pix', valor: Number(D.total), parcelas: 1 })); return;
+    case 'del-pay': el.closest('.payrow').remove(); return;
+    case 'del-visit': { const x = v.visitas[D.i]; if (confirm('Excluir esta visita e os lançamentos dela no histórico?')) { v.hist = v.hist.filter(h => !(h.os === x.os && h.data === x.data)); v.visitas.splice(D.i, 1); await save(); closeSheet(); render(); toast('Visita excluída', 'trash-2'); } return; }
     case 'export': { const blob = new Blob([localStorage.getItem(S.vk)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `revisa-backup-${iso(today())}.json`; a.click(); return toast('Backup baixado', 'download'); }
     case 'chg-pass': { const np = $('#np').value; if (np.length < 6) return toast('Mínimo de 6 caracteres', 'triangle-alert'); S.salt = crypto.getRandomValues(new Uint8Array(16)); S.key = await deriveKey(S.user, np, S.salt); await save(); $('#np').value = ''; return toast('Senha alterada', 'lock'); }
     case 'wipe': if (confirm('Apagar TODOS os dados desta conta neste aparelho? Não dá para desfazer.')) { localStorage.removeItem(S.vk); logout(); } return;
@@ -368,14 +409,21 @@ dlg.addEventListener('submit', async e => {
     const o = { item: f.item.trim(), cat: f.cat, ultima: f.ultima || null, kmTroca: num(f.kmTroca), intKm: num(f.intKm), intMeses: num(f.intMeses), obs: f.obs.trim() };
     if (kind === 'plan-add') v.plano.push({ id: uid(), ...o }); else Object.assign(v.plano.find(x => x.id === form.dataset.id), o);
     toast('Plano atualizado', 'wrench');
-  } else if (kind === 'hist-add') {
-    const h = { data: f.data, os: f.os || 'S/N', oficina: f.oficina || 'Oficina não informada', km: Number(f.km), tipo: f.tipo, cat: f.cat, desc: f.desc, qtd: Number(f.qtd), unit: Number(f.unit), desconto: Number(f.desconto) || 0 };
-    v.hist.push(h);
+  } else if (kind === 'hist-add' || kind === 'hist-edit') {
+    const h = { data: f.data, os: f.os || 'S/N', oficina: f.oficina || 'Oficina não informada', km: Number(f.km), tipo: f.tipo, cat: f.cat, desc: f.desc, qtd: Number(f.qtd), unit: Number(f.unit), desconto: Number(f.desconto) || 0, obs: (f.obs || '').trim() };
+    if (kind === 'hist-add') v.hist.push(h); else Object.assign(v.hist[form.dataset.i], h);
     const x = v.visitas.find(x => x.os === h.os && x.data === h.data);
-    if (!x) v.visitas.push({ data: h.data, os: h.os, oficina: h.oficina, km: h.km, feito: h.desc, pagamento: '—' });
-    else if (!x.feito.includes(h.desc)) x.feito += '; ' + h.desc;
+    if (!x) v.visitas.push({ data: h.data, os: h.os, oficina: h.oficina, km: h.km, feito: h.desc, pagamentos: [], garantia: 90, obs: '' });
+    else if (kind === 'hist-add' && !x.feito.includes(h.desc)) x.feito = x.feito ? x.feito + '; ' + h.desc : h.desc;
     if (h.km > v.km) v.km = h.km;
-    toast('Lançamento adicionado', 'plus');
+    toast(kind === 'hist-add' ? 'Lançamento adicionado' : 'Lançamento atualizado', 'check');
+  } else if (kind === 'visit-add' || kind === 'visit-edit') {
+    const fdta = new FormData(form), pv = fdta.getAll('pv'), pp = fdta.getAll('pp');
+    const pays = fdta.getAll('pf').map((forma, k) => ({ forma, valor: Number(pv[k]) || 0, parcelas: Math.max(1, Number(pp[k]) || 1) })).filter(p => p.valor > 0);
+    const o = { data: f.data, os: f.os || 'S/N', oficina: f.oficina.trim() || 'Oficina não informada', km: Number(f.km) || v.km, garantia: Number(f.garantia) || 0, feito: f.feito.trim(), obs: f.obs.trim(), pagamentos: pays };
+    if (kind === 'visit-add') v.visitas.push(o);
+    else { const x = v.visitas[form.dataset.i]; if (x.os !== o.os || x.data !== o.data) v.hist.forEach(h => { if (h.os === x.os && h.data === x.data) { h.os = o.os; h.data = o.data; } }); Object.assign(x, o); if (pays.length) delete x.pagamento; }
+    toast('Visita salva', 'store');
   }
   await save(); closeSheet(); render();
 });
