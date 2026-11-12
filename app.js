@@ -59,7 +59,12 @@ $('#loginForm').addEventListener('submit', async ev => {
       if (pass !== $('#pass2').value) throw new Error('As senhas não conferem.');
       let data = { km: 0, plano: [], hist: [], visitas: [] };
       const f = $('#seed').files[0];
-      if (f) data = JSON.parse(await f.text());
+      if (f) {
+        const parsed = JSON.parse(await f.text());
+        if (parsed.salt && parsed.iv && parsed.ct) { localStorage.setItem(VAULT, JSON.stringify(parsed)); showLogin(); $('#loginErr').textContent = 'Cofre importado. Agora entre com seu usuário e senha.'; return; }
+        if (!Array.isArray(parsed.plano) || !Array.isArray(parsed.hist)) throw new Error('Arquivo de dados inválido.');
+        data = parsed;
+      }
       S.salt = crypto.getRandomValues(new Uint8Array(16));
       S.key = await deriveKey(user, pass, S.salt); S.data = data; S.user = user;
       await save();
@@ -67,6 +72,7 @@ $('#loginForm').addEventListener('submit', async ev => {
       const v = JSON.parse(localStorage.getItem(VAULT));
       const salt = unb64(v.salt), key = await deriveKey(user, pass, salt);
       try { S.data = await decryptData(key, v); } catch { throw new Error('Usuário ou senha incorretos.'); }
+      if (!Array.isArray(S.data.plano)) { S.data = null; throw new Error('Dados corrompidos neste aparelho. Importe o cofre em “Backup / outro aparelho”.'); }
       S.salt = salt; S.key = key; S.user = user;
     }
     $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');
