@@ -3,39 +3,43 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1f2a44">
+<meta name="theme-color" content="#14161a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Focus 2013">
-<title>Focus 2013 · Manutenção</title>
-<link rel="icon" type="image/svg+xml" href="icon.svg">
+<meta name="apple-mobile-web-app-title" content="Revisa">
+<title>Revisa · Manutenção automotiva</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="preload" href="fonts/barlow-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <section id="login" class="login hidden">
-  <form id="loginForm" class="card login-card" autocomplete="on">
-    <img src="icon-192.png" alt="" class="logo">
-    <h1>Focus 2013</h1>
-    <p class="muted" id="loginMsg">Controle de manutenção</p>
-    <label>Usuário<input id="user" autocomplete="username" required autocapitalize="none"></label>
-    <label>Senha<span class="pw"><input id="pass" type="password" autocomplete="current-password" required minlength="6"><button type="button" class="eye" id="eye" aria-label="Mostrar senha"></button></span></label>
-    <label class="only-setup hidden">Repita a senha<input id="pass2" type="password" autocomplete="new-password"></label>
-    <label class="only-setup hidden">Dados iniciais (opcional, .json)<input id="seed" type="file" accept=".json,application/json"></label>
-    <button class="btn primary wide" id="loginBtn">Entrar</button>
-    <p class="err" id="loginErr"></p>
-    <details class="muted"><summary>Backup / outro aparelho</summary>
-      <p>Já tem um backup criptografado? Importe e depois entre com o mesmo usuário e senha.</p>
-      <input id="importVault" type="file" accept=".json">
-    </details>
-  </form>
+  <div class="login-card">
+    <div class="brand"><span id="loginMark"></span><b>Revisa</b></div>
+    <p class="tag-line">Controle de manutenção automotiva</p>
+    <form id="loginForm" autocomplete="on">
+      <p class="note" id="loginMsg"></p>
+      <label>Usuário ou e-mail<input id="user" autocomplete="username" required autocapitalize="none"></label>
+      <label>Senha<span class="pw"><input id="pass" type="password" autocomplete="current-password" required minlength="6"><button type="button" class="eye" id="eye" aria-label="Mostrar senha"></button></span></label>
+      <label class="only-setup hidden">Repita a senha<input id="pass2" type="password" autocomplete="new-password"></label>
+      <label class="only-setup hidden">Importar dados (opcional, arquivo .json)<input id="seed" type="file" accept=".json,application/json"></label>
+      <button class="btn primary wide" id="loginBtn">Entrar</button>
+      <p class="err" id="loginErr"></p>
+      <button type="button" class="btn wide" id="switchMode" style="margin-top:10px"></button>
+      <details><summary>Já tenho um backup</summary>
+        <p>Importe o arquivo de backup criptografado e depois entre com o mesmo usuário e senha.</p>
+        <input id="importVault" type="file" accept=".json">
+      </details>
+    </form>
+  </div>
 </section>
 
 <main id="app" class="hidden">
-  <header>
-    <img src="icon-192.png" alt="" class="hlogo">
-    <div class="ht"><strong>Ford Focus 2013</strong><span class="muted">Focus HC Flex · OLS-1B23</span></div>
+  <header class="top">
+    <div class="brand"><span id="hMark"></span><b>Revisa</b></div>
+    <button class="vsel" id="vsel" aria-label="Trocar veículo"></button>
     <button class="icon-btn" id="logout" aria-label="Sair" title="Sair"></button>
   </header>
   <div id="view"></div>
